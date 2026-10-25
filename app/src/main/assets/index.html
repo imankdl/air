@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f2937">
+<title>هوای مشهد</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Tahoma,Arial,sans-serif;background:#1f2937;color:#fff;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px}
+  h1{font-size:18px;margin:8px 0 16px;font-weight:normal;opacity:.9}
+  #card{width:100%;max-width:420px;border-radius:20px;padding:24px 16px;text-align:center;background:#6b7280;transition:background .3s}
+  #num{font-size:84px;line-height:1.1;font-weight:bold}
+  #state{font-size:22px;margin-top:6px}
+  #tip{font-size:14px;margin-top:10px;opacity:.9}
+  #time{font-size:12px;margin-top:14px;opacity:.85}
+  #list{width:100%;max-width:420px;margin-top:16px}
+  .row{display:flex;justify-content:space-between;align-items:center;background:#374151;border-radius:12px;padding:10px 14px;margin-bottom:8px;font-size:14px}
+  .row b{min-width:48px;text-align:center;border-radius:8px;padding:2px 8px;color:#111}
+  button{background:#374151;color:#fff;border:0;border-radius:12px;padding:12px 20px;font-size:15px;margin-top:8px;font-family:inherit}
+  #setup{width:100%;max-width:420px;display:none;background:#374151;border-radius:16px;padding:16px;font-size:14px;line-height:1.9}
+  #setup input{width:100%;padding:10px;border-radius:8px;border:0;margin:8px 0;direction:ltr;font-size:15px}
+  #setup .en{direction:ltr;text-align:left;display:block;background:#1f2937;border-radius:8px;padding:6px 10px;margin:6px 0}
+  #msg{font-size:13px;margin-top:10px;opacity:.9;text-align:center}
+</style>
+</head>
+<body>
+<h1>کیفیت هوای مشهد</h1>
+
+<div id="setup">
+  <div>برای دیدن اطلاعات، یک توکن رایگان لازم است.</div>
+  <div>۱. این آدرس را در مرورگر باز کنید:</div>
+  <span class="en">aqicn.org/data-platform/token</span>
+  <div>۲. ایمیل خود را بدهید و توکن را از ایمیل بردارید.</div>
+  <div>۳. توکن را اینجا بنویسید:</div>
+  <input id="tok" placeholder="token" autocomplete="off">
+  <button id="save">ذخیره</button>
+</div>
+
+<div id="card" style="display:none">
+  <div id="num">--</div>
+  <div id="state"></div>
+  <div id="tip"></div>
+  <div id="time"></div>
+</div>
+<div id="list"></div>
+<div id="msg"></div>
+<button id="refresh" style="display:none">به‌روزرسانی</button>
+<button id="reset" style="display:none">تغییر توکن</button>
+<div id="src" style="font-size:11px;opacity:.6;margin-top:16px;text-align:center">منبع داده: سامانه پایش کیفی هوای کشور (از طریق aqicn)</div>
+
+<script>
+var LEVELS=[
+ [50,"#4ade80","هوا پاک است","برای همه مناسب است."],
+ [100,"#facc15","هوا قابل قبول است","افراد خیلی حساس مراقب باشند."],
+ [150,"#fb923c","ناسالم برای گروه‌های حساس","کودکان، سالمندان و بیماران بیرون نروند."],
+ [200,"#f87171","هوا ناسالم است","فعالیت سنگین بیرون از خانه نکنید."],
+ [300,"#a78bfa","هوا خیلی ناسالم است","تا می‌شود در خانه بمانید."],
+ [9999,"#be123c","هوا خطرناک است","از خانه بیرون نروید."]
+];
+function level(v){for(var i=0;i<LEVELS.length;i++){if(v<=LEVELS[i][0])return LEVELS[i];}return LEVELS[5];}
+function fa(n){return Number(n).toLocaleString("fa-IR",{useGrouping:false});}
+function $(id){return document.getElementById(id);}
+function getTok(){try{return localStorage.getItem("aqtok")||"";}catch(e){return "";}}
+function setTok(t){try{localStorage.setItem("aqtok",t);}catch(e){}}
+
+function show(){
+  var t=getTok();
+  if(!t){
+    $("setup").style.display="block";$("card").style.display="none";
+    $("refresh").style.display="none";$("reset").style.display="none";$("list").innerHTML="";
+    return;
+  }
+  $("setup").style.display="none";
+  $("refresh").style.display="inline-block";$("reset").style.display="inline-block";
+  load(t);
+}
+
+function load(t){
+  $("msg").textContent="در حال دریافت...";
+  fetch("https://api.waqi.info/search/?keyword=mashhad&token="+encodeURIComponent(t))
+  .then(function(r){return r.json();})
+  .then(function(j){
+    if(j.status!=="ok"){
+      $("msg").textContent="توکن درست نیست یا سرویس جواب نداد. توکن را دوباره بدهید.";
+      return;
+    }
+    var st=(j.data||[]).filter(function(s){
+      var n=(s.station&&s.station.name)||"";
+      return /mash/i.test(n);
+    }).map(function(s){
+      return {name:s.station.name,aqi:parseInt(s.aqi,10),time:s.time&&s.time.stime};
+    });
+    var ok=st.filter(function(s){return !isNaN(s.aqi);});
+    if(!ok.length){
+      $("card").style.display="none";$("list").innerHTML="";
+      $("msg").textContent="الان هیچ ایستگاهی در مشهد داده ندارد. کمی بعد دوباره امتحان کنید.";
+      return;
+    }
+    var sum=0;ok.forEach(function(s){sum+=s.aqi;});
+    var avg=Math.round(sum/ok.length);
+    var L=level(avg);
+    $("card").style.display="block";$("card").style.background=L[1];$("card").style.color="#111";
+    $("num").textContent=fa(avg);$("state").textContent=L[2];$("tip").textContent=L[3];
+    var latest=ok.map(function(s){return s.time||"";}).sort().pop();
+    $("time").textContent="میانگین "+fa(ok.length)+" ایستگاه. آخرین زمان: "+latest;
+    var h="";
+    st.forEach(function(s){
+      var has=!isNaN(s.aqi);var c=has?level(s.aqi)[1]:"#9ca3af";
+      h+='<div class="row"><span style="direction:ltr">'+esc(s.name)+'</span><b style="background:'+c+'">'+(has?fa(s.aqi):"بدون داده")+'</b></div>';
+    });
+    $("list").innerHTML=h;$("msg").textContent="";
+  })
+  .catch(function(){$("msg").textContent="اینترنت یا سرویس مشکل دارد. دوباره امتحان کنید.";});
+}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+
+$("save").onclick=function(){var v=$("tok").value.trim();if(v){setTok(v);show();}};
+$("refresh").onclick=show;
+$("reset").onclick=function(){setTok("");show();};
+show();
+</script>
+</body>
+</html>
